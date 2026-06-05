@@ -3,23 +3,22 @@ import datetime
 import requests
 import yfinance as yf
 import pandas as pd
-from bs4 import BeautifulSoup
 from threading import Thread
 from flask import Flask
 import os
 
-# إعداد خادم ويب مصغر لإرضاء منصة Render ليبقى السيرفر يعمل دائماً
+# خادم ويب مصغر للحفاظ على استقرار السيرفر في Render
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "SMC Forex Bot is Running Successfully!", 200
+    return "SMC Institutional Bot is Online and Safe", 200
 
 # إعدادات التلغرام الخاصة بك
 BOT_TOKEN = "8830911482:AAFnxsHB7uFLWxEtrc1KsGe6Txk5un6KUnk"
 CHAT_ID = "@Forex_signals"
 
-# الأصول المطلوبة
+# الأصول المطلوبة للتحليل
 SYMBOLS = {
     "NQ=F": "الميني ناسداك (E-mini Nasdaq)",
     "^NDX": "الناسداك الرئيسي (Nasdaq 100)",
@@ -34,60 +33,27 @@ def send_telegram_message(message):
     except Exception as e:
         print(f"Error sending to Telegram: {e}")
 
-def check_us_news_block():
-    """فحص الأخبار الاقتصادية الأمريكية عالية الأهمية"""
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        url = "https://sslecal.forexprostools.com/?columns=currency,importance&importance=3&currencies=5&calType=day&timeZone=8"
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return False
-            
-        soup = BeautifulSoup(response.text, 'html.parser')
-        rows = soup.find_all('tr', class_='js-event-item')
-        now = datetime.datetime.now()
-        
-        for row in rows:
-            time_cell = row.find('td', class_='time')
-            if not time_cell or ":" not in time_cell.text:
-                continue
-                
-            try:
-                hour, minute = map(int, time_cell.text.strip().split(':'))
-                news_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                time_diff = (news_time - now).total_seconds() / 60
-                
-                if -30 <= time_diff <= 30:
-                    print(f"⚠️ حظر الأخبار نشط! خبر قوي بعد {round(time_diff)} دقيقة.")
-                    return True
-            except ValueError:
-                continue
-    except Exception as e:
-        print(f"خطأ فحص الأخبار: {e}")
-    return False
-
 def get_market_trend(symbol):
-    """تحديد الاتجاه العام على فريم 4 ساعات باستخدام EMA 50"""
+    """تحديد اتجاه صناع السوق على فريم 4 ساعات باستخدام المتوسط المتحرك"""
     try:
         ticker = yf.Ticker(symbol)
         df_4h = ticker.history(period="1mo", interval="4h")
-        if df_4h.empty or len(df_4h) < 50:
+        if df_4h.empty or len(df_4h) < 20:
             return "NEUTRAL"
         
-        ema_50 = df_4h['Close'].ewm(span=50, adjust=False).mean()
+        ma_20 = df_4h['Close'].rolling(window=20).mean().iloc[-1]
         current_price = df_4h['Close'].iloc[-1]
-        current_ema = ema_50.iloc[-1]
         
-        if current_price > current_ema:
+        if current_price > ma_20:
             return "BULLISH"
-        elif current_price < current_ema:
+        elif current_price < ma_20:
             return "BEARISH"
     except Exception as e:
-        print(f"خطأ في حساب الاتجاه لـ {symbol}: {e}")
+        print(f"Trend error for {symbol}: {e}")
     return "NEUTRAL"
 
 def calculate_atr(df, period=14):
-    """حساب مؤشر ATR لتحديد وقف الخسارة الديناميكي"""
+    """حساب متوافق لديناميكية التقلب وقف الخسارة"""
     high_low = df['High'] - df['Low']
     high_close = (df['High'] - df['Close'].shift()).abs()
     low_close = (df['Low'] - df['Close'].shift()).abs()
@@ -97,15 +63,12 @@ def calculate_atr(df, period=14):
     return atr.iloc[-1]
 
 def analyze_smc_markets():
-    if check_us_news_block():
-        print("⛔ تجميد التحليل الفني مؤقتاً بسبب الأخبار القوية.")
-        return
-
-    print("🤖 جاري فحص الأسواق بالمعايير المؤسسية الاحترافية...")
+    print(f"🤖 [فحص مؤسسي] جاري مسح الأسواق بدقة عالية... {datetime.datetime.now()}")
+    
     for symbol, name in SYMBOLS.items():
         try:
             ticker = yf.Ticker(symbol)
-            df = ticker.history(period="5d", interval="15m")
+            df = ticker.history(period="3d", interval="15m")
             
             if df.empty or len(df) < 20:
                 continue
@@ -120,7 +83,7 @@ def analyze_smc_markets():
             trend = get_market_trend(symbol)
             atr = calculate_atr(df)
             
-            # 1. إشارة شراء ذكية
+            # 1. إشارة شراء ذكية متوافقة مع الاتجاه الصاعد للسيولة
             if current_price <= min_low * 1.001 and trend == "BULLISH":
                 sl = round(current_price - (atr * 1.5), 2)
                 risk = current_price - sl
@@ -135,7 +98,7 @@ def analyze_smc_markets():
 ━━━━━━━━━━━━━━━━━━
 🔍 **التأكيدات البرمجية المتقدمة:**
 - السعر ارتد من منطقة تجميع سيولة (Liquidity Sweep).
-- متوافق مع الاتجاه الكلي لصناع السوق (EMA Trend Match).
+- متوافق مع الاتجاه الكلي لصناع السوق (Trend Match).
 - الوقف والاهداف ديناميكية ومحسوبة بدقة بناءً على التقلب الحالي (ATR).
 
 💵 **سعر الدخول الحالي:** {current_price}
@@ -144,11 +107,11 @@ def analyze_smc_markets():
 🎯 **الهدف الأول (TP1):** {tp1}
 🎯 **الهدف الثاني (TP2):** {tp2}
 ━━━━━━━━━━━━━━━━━━
-⚠️ **إدارة رأس المال:** خاطر بـ 1% فقط من حسابك لكل صفقة."""
+⚠️ **إدارة المخاطر:** التزم بحجم عقود متزن لحسابك الشخصي."""
                 send_telegram_message(msg)
                 time.sleep(3)
                 
-            # 2. إشارة بيع ذكية
+            # 2. إشارة بيع ذكية متوافقة مع الاتجاه الهابط للسيولة
             elif current_price >= max_high * 0.999 and trend == "BEARISH":
                 sl = round(current_price + (atr * 1.5), 2)
                 risk = sl - current_price
@@ -163,7 +126,7 @@ def analyze_smc_markets():
 ━━━━━━━━━━━━━━━━━━
 🔍 **التأكيدات البرمجية المتقدمة:**
 - السعر يختبر قمة سحب سيولة (Buy-side Liquidity).
-- متوافق مع التدفق المالي الهابط للمؤسسات (EMA Trend Match).
+- متوافق مع التدفق المالي الهابط للمؤسسات (Trend Match).
 - الوقف والاهداف ديناميكية ومحسوبة بدقة بناءً على التقلب الحالي (ATR).
 
 💵 **سعر الدخول الحالي:** {current_price}
@@ -180,20 +143,22 @@ def analyze_smc_markets():
             print(f"خطأ أثناء تحليل {name}: {e}")
 
 def run_market_loop():
-    """حلقة فحص السوق تعمل في خلفية خادم الويب"""
     while True:
         try:
             analyze_smc_markets()
         except Exception as e:
             print(f"Loop error: {e}")
-        time.sleep(60) # فحص كل دقيقة
+        time.sleep(60) # فحص كل دقيقة لاقتناص السيولة الحية
 
 if __name__ == "__main__":
-    # تشغيل حلقة الفحص الذكي في مسار منفصل (Thread) لكي لا تتعطل
     bot_thread = Thread(target=run_market_loop)
     bot_thread.daemon = True
     bot_thread.start()
     
-    # تشغيل خادم الويب على المنفذ الذي تطلبه Render
-    port = int(os.environ.get("PORT", 5000))
+    # حل مشكلة قراءة المنفذ في الاستضافات المجانية لتفادي خطأ الـ None
+    try:
+        port = int(os.environ.get("PORT", 5000))
+    except (TypeError, ValueError):
+        port = 5000
+        
     app.run(host="0.0.0.0", port=port)
