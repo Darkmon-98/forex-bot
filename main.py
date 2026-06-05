@@ -1,12 +1,15 @@
 import time
+import datetime
 import requests
 import yfinance as yf
+import pandas as pd
+from bs4 import BeautifulSoup
 
-# إعدادات التلغرام الخاصة بك مأخوذة من ملفك مباشرة
+# إعدادات التلغرام الخاصة بك
 BOT_TOKEN = "8830911482:AAFnxsHB7uFLWxEtrc1KsGe6Txk5un6KUnk"
 CHAT_ID = "@Forex_signals"
 
-# الرموز الرسمية للأصول المطلوبة على ياهو فاينانس
+# الأصول المطلوبة
 SYMBOLS = {
     "NQ=F": "الميني ناسداك (E-mini Nasdaq)",
     "^NDX": "الناسداك الرئيسي (Nasdaq 100)",
@@ -17,54 +20,114 @@ def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
     try:
-        response = requests.post(url, json=payload)
-        if response.status_code == 200:
-            print("تم إرسال التنبيه بنجاح إلى التلغرام.")
-        else:
-            print(f"فشل الإرسال: {response.text}")
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
         print(f"Error sending to Telegram: {e}")
 
-def analyze_smc_markets():
-    print("🤖 جاري سحب البيانات الحية وفحص استراتيجية SMC للأصول...")
-    
-    for symbol, name in SYMBOLS.items():
-        try:
-            # سحب بيانات آخر يومين بفريم 15 دقيقة (الموزون لصفقات الـ OB والسيولة)
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period="2d", interval="15m")
+def check_us_news_block():
+    """فحص الأخبار الاقتصادية الأمريكية عالية الأهمية"""
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        url = "https://sslecal.forexprostools.com/?columns=currency,importance&importance=3&currencies=5&calType=day&timeZone=8"
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return False
             
-            if df.empty or len(df) < 15:
-                print(f"⚠️ لا توجد بيانات كافية حالياً للرمز: {symbol}")
+        soup = BeautifulSoup(response.text, 'html.parser')
+        rows = soup.find_all('tr', class_='js-event-item')
+        now = datetime.datetime.now()
+        
+        for row in rows:
+            time_cell = row.find('td', class_='time')
+            if not time_cell or ":" not in time_cell.text:
                 continue
                 
-            # قراءة الأسعار الحالية والماضية لتحديد الهيكل السعري
-            current_price = round(df['Close'].iloc[-1], 2)
+            try:
+                hour, minute = map(int, time_cell.text.strip().split(':'))
+                news_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                time_diff = (news_time - now).total_seconds() / 60
+                
+                if -30 <= time_diff <= 30:
+                    print(f"⚠️ حظر الأخبار نشط! خبر قوي بعد {round(time_diff)} دقيقة.")
+                    return True
+            except ValueError:
+                continue
+    except Exception as e:
+        print(f"خطأ فحص الأخبار: {e}")
+    return False
+
+def get_market_trend(symbol):
+    """تحديد الاتجاه العام على فريم 4 ساعات باستخدام EMA 50"""
+    try:
+        ticker = yf.Ticker(symbol)
+        df_4h = ticker.history(period="1mo", interval="4h")
+        if df_4h.empty or len(df_4h) < 50:
+            return "NEUTRAL"
+        
+        ema_50 = df_4h['Close'].ewm(span=50, adjust=False).mean()
+        current_price = df_4h['Close'].iloc[-1]
+        current_ema = ema_50.iloc[-1]
+        
+        if current_price > current_ema:
+            return "BULLISH" # اتجاه صاعد كلي
+        elif current_price < current_ema:
+            return "BEARISH" # اتجاه هابط كلي
+    except Exception as e:
+        print(f"خطأ في حساب الاتجاه لـ {symbol}: {e}")
+    return "NEUTRAL"
+
+def calculate_atr(df, period=14):
+    """حساب مؤشر ATR لتحديد وقف الخسارة الديناميكي"""
+    high_low = df['High'] - df['Low']
+    high_close = (df['High'] - df['Close'].shift()).abs()
+    low_close = (df['Low'] - df['Close'].shift()).abs()
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    atr = true_range.rolling(period).mean()
+    return atr.iloc[-1]
+
+def analyze_smc_markets():
+    if check_us_news_block():
+        print("⛔ تجميد التحليل الفني مؤقتاً بسبب الأخبار القوية.")
+        return
+
+    print("🤖 جاري فحص الأسواق بالمعايير المؤسسية الاحترافية...")
+    for symbol, name in SYMBOLS.items():
+        try:
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period="5d", interval="15m")
             
-            # حساب القمم والقيعان لآخر 12 شمعة لتحديد مناطق السيولة (Liquidity Pools)
-            recent_highs = df['High'].iloc[-13:-1]
-            recent_lows = df['Low'].iloc[-13:-1]
+            if df.empty or len(df) < 20:
+                continue
+                
+            current_price = round(df['Close'].iloc[-1], 2)
+            recent_highs = df['High'].iloc[-15:-1]
+            recent_lows = df['Low'].iloc[-15:-1]
             
             max_high = round(recent_highs.max(), 2)
             min_low = round(recent_lows.min(), 2)
             
-            # 1. إشارة شراء ذكية (عند ملامسة منطقة طلب مؤسسية أو سحب سيولة القاع)
-            if current_price <= min_low * 1.001:
-                sl = round(min_low * 0.998, 2)
-                # حساب الأهداف بنسبة مخاطرة إلى عائد متزنة (1:2 حداً أدنى)
-                tp1 = round(current_price + (current_price - sl) * 1.5, 2)
-                tp2 = round(current_price + (current_price - sl) * 2.5, 2)
+            # حساب الاتجاه العام والتقلب (ATR)
+            trend = get_market_trend(symbol)
+            atr = calculate_atr(df)
+            
+            # 1. إشارة شراء ذكية (تتوافق مع اتجاه صاعد كلي)
+            if current_price <= min_low * 1.001 and trend == "BULLISH":
+                sl = round(current_price - (atr * 1.5), 2) # الوقف أسفل تذبذب السوق الفعلي
+                risk = current_price - sl
+                tp1 = round(current_price + (risk * 1.5), 2)
+                tp2 = round(current_price + (risk * 2.5), 2)
                 
-                msg = f"""🛡️ **توصية هيرمز الموزونة (SMC BUY)** 🛡️
+                msg = f"""🛡️ **توصية هيرمز المؤسسية الاحترافية (SMC BUY)** 🛡️
 ━━━━━━━━━━━━━━━━━━
 💱 **الأصل/الزوج:** {name} ({symbol})
 📈 **نوع الصفقة:** 🟢 شراء ذكي (Order Block)
-⏱️ **الفريم التحليلي:** 15 دقيقة (تلقائي)
+⏱️ **الاتجاه العام (4H):** 📈 صاعد كلي (Bullish Structure)
 ━━━━━━━━━━━━━━━━━━
-🔍 **التأكيدات البرمجية للـ SMC:**
-- السعر يلامس منطقة تجميع مؤسسية (Demand Zone).
-- تم تصفية سيولة القاع المباشر (Liquidity Sweep).
-- بنية السوق تظهر ملامح ارتداد هيكلي مؤكد.
+🔍 **التأكيدات البرمجية المتقدمة:**
+- السعر ارتد من منطقة تجميع سيولة (Liquidity Sweep).
+- متوافق مع الاتجاه الكلي لصناع السوق (EMA Trend Match).
+- الوقف والاهداف ديناميكية ومحسوبة بدقة بناءً على التقلب الحالي (ATR).
 
 💵 **سعر الدخول الحالي:** {current_price}
 
@@ -72,26 +135,27 @@ def analyze_smc_markets():
 🎯 **الهدف الأول (TP1):** {tp1}
 🎯 **الهدف الثاني (TP2):** {tp2}
 ━━━━━━━━━━━━━━━━━━
-⚠️ **إدارة المخاطر:** التزم بحجم عقود متزن لحسابك الشخصي."""
+⚠️ **إدارة رأس المال:** خاطر بـ 1% فقط من حسابك لكل صفقة."""
                 send_telegram_message(msg)
                 time.sleep(3)
                 
-            # 2. إشارة بيع ذكية (عند ملامسة منطقة عرض مؤسسية أو سحب سيولة القمة)
-            elif current_price >= max_high * 0.999:
-                sl = round(max_high * 1.002, 2)
-                tp1 = round(current_price - (sl - current_price) * 1.5, 2)
-                tp2 = round(current_price - (sl - current_price) * 2.5, 2)
+            # 2. إشارة بيع ذكية (تتوافق مع اتجاه هابط كلي)
+            elif current_price >= max_high * 0.999 and trend == "BEARISH":
+                sl = round(current_price + (atr * 1.5), 2)
+                risk = sl - current_price
+                tp1 = round(current_price - (risk * 1.5), 2)
+                tp2 = round(current_price - (risk * 2.5), 2)
                 
-                msg = f"""🛡️ **توصية هيرمز الموزونة (SMC SELL)** 🛡️
+                msg = f"""🛡️ **توصية هيرمز المؤسسية الاحترافية (SMC SELL)** 🛡️
 ━━━━━━━━━━━━━━━━━━
 💱 **الأصل/الزوج:** {name} ({symbol})
 📈 **نوع الصفقة:** 🔴 بيع ذكي (Supply Block)
-⏱️ **الفريم التحليلي:** 15 دقيقة (تلقائي)
+⏱️ **الاتجاه العام (4H):** 📉 هابط كلي (Bearish Structure)
 ━━━━━━━━━━━━━━━━━━
-🔍 **التأكيدات البرمجية للـ SMC:**
-- السعر يختبر منطقة بيع تابعة لصناع السوق (Supply OB).
-- تم رصد سحب لسيولة القمم السابقة (Buy-side Liquidity).
-- توقع هبوط تصحيحي قوي مع اتجاه السيولة الكبرى.
+🔍 **التأكيدات البرمجية المتقدمة:**
+- السعر يختبر قمة سحب سيولة (Buy-side Liquidity).
+- متوافق مع التدفق المالي الهابط للمؤسسات (EMA Trend Match).
+- الوقف والاهداف ديناميكية ومحسوبة بدقة بناءً على التقلب الحالي (ATR).
 
 💵 **سعر الدخول الحالي:** {current_price}
 
@@ -99,15 +163,14 @@ def analyze_smc_markets():
 🎯 **الهدف الأول (TP1):** {tp1}
 🎯 **الهدف الثاني (TP2):** {tp2}
 ━━━━━━━━━━━━━━━━━━
-⚠️ **إدارة المخاطر:** لا تخاطر بأكثر من 1-2% من محفظتك في الصفقة."""
+⚠️ **إدارة المخاطر:** لا تخاطر بأكثر من 1% من محفظتك في الصفقة."""
                 send_telegram_message(msg)
                 time.sleep(3)
                 
         except Exception as e:
-            print(f"خطأ أثناء فحص {name}: {e}")
+            print(f"خطأ أثناء تحليل {name}: {e}")
 
 if __name__ == "__main__":
-    # السكربت يفحص السوق دورياً كل 5 دقائق بشكل مستقل تماماً
     while True:
         analyze_smc_markets()
-        time.sleep(300)
+        time.sleep(60) # الفحص يتم كل دقيقة واحدة لاقتناص أسرع الحركات اللحظية
