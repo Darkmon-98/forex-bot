@@ -4,6 +4,16 @@ import requests
 import yfinance as yf
 import pandas as pd
 from bs4 import BeautifulSoup
+from threading import Thread
+from flask import Flask
+import os
+
+# إعداد خادم ويب مصغر لإرضاء منصة Render ليبقى السيرفر يعمل دائماً
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "SMC Forex Bot is Running Successfully!", 200
 
 # إعدادات التلغرام الخاصة بك
 BOT_TOKEN = "8830911482:AAFnxsHB7uFLWxEtrc1KsGe6Txk5un6KUnk"
@@ -69,9 +79,9 @@ def get_market_trend(symbol):
         current_ema = ema_50.iloc[-1]
         
         if current_price > current_ema:
-            return "BULLISH" # اتجاه صاعد كلي
+            return "BULLISH"
         elif current_price < current_ema:
-            return "BEARISH" # اتجاه هابط كلي
+            return "BEARISH"
     except Exception as e:
         print(f"خطأ في حساب الاتجاه لـ {symbol}: {e}")
     return "NEUTRAL"
@@ -107,13 +117,12 @@ def analyze_smc_markets():
             max_high = round(recent_highs.max(), 2)
             min_low = round(recent_lows.min(), 2)
             
-            # حساب الاتجاه العام والتقلب (ATR)
             trend = get_market_trend(symbol)
             atr = calculate_atr(df)
             
-            # 1. إشارة شراء ذكية (تتوافق مع اتجاه صاعد كلي)
+            # 1. إشارة شراء ذكية
             if current_price <= min_low * 1.001 and trend == "BULLISH":
-                sl = round(current_price - (atr * 1.5), 2) # الوقف أسفل تذبذب السوق الفعلي
+                sl = round(current_price - (atr * 1.5), 2)
                 risk = current_price - sl
                 tp1 = round(current_price + (risk * 1.5), 2)
                 tp2 = round(current_price + (risk * 2.5), 2)
@@ -139,7 +148,7 @@ def analyze_smc_markets():
                 send_telegram_message(msg)
                 time.sleep(3)
                 
-            # 2. إشارة بيع ذكية (تتوافق مع اتجاه هابط كلي)
+            # 2. إشارة بيع ذكية
             elif current_price >= max_high * 0.999 and trend == "BEARISH":
                 sl = round(current_price + (atr * 1.5), 2)
                 risk = sl - current_price
@@ -170,7 +179,21 @@ def analyze_smc_markets():
         except Exception as e:
             print(f"خطأ أثناء تحليل {name}: {e}")
 
-if __name__ == "__main__":
+def run_market_loop():
+    """حلقة فحص السوق تعمل في خلفية خادم الويب"""
     while True:
-        analyze_smc_markets()
-        time.sleep(60) # الفحص يتم كل دقيقة واحدة لاقتناص أسرع الحركات اللحظية
+        try:
+            analyze_smc_markets()
+        except Exception as e:
+            print(f"Loop error: {e}")
+        time.sleep(60) # فحص كل دقيقة
+
+if __name__ == "__main__":
+    # تشغيل حلقة الفحص الذكي في مسار منفصل (Thread) لكي لا تتعطل
+    bot_thread = Thread(target=run_market_loop)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # تشغيل خادم الويب على المنفذ الذي تطلبه Render
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
