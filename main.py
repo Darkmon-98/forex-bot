@@ -3,16 +3,6 @@ import datetime
 import requests
 import yfinance as yf
 import pandas as pd
-from threading import Thread
-from flask import Flask
-import os
-
-# خادم ويب مصغر للحفاظ على استقرار السيرفر في Render
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "SMC Institutional Bot is Online and Safe", 200
 
 # إعدادات التلغرام الخاصة بك
 BOT_TOKEN = "8830911482:AAFnxsHB7uFLWxEtrc1KsGe6Txk5un6KUnk"
@@ -34,7 +24,7 @@ def send_telegram_message(message):
         print(f"Error sending to Telegram: {e}")
 
 def get_market_trend(symbol):
-    """تحديد اتجاه صناع السوق على فريم 4 ساعات باستخدام المتوسط المتحرك"""
+    """تحديد اتجاه صناع السوق على فريم 4 ساعات"""
     try:
         ticker = yf.Ticker(symbol)
         df_4h = ticker.history(period="1mo", interval="4h")
@@ -115,53 +105,4 @@ def analyze_smc_markets():
             elif current_price >= max_high * 0.999 and trend == "BEARISH":
                 sl = round(current_price + (atr * 1.5), 2)
                 risk = sl - current_price
-                tp1 = round(current_price - (risk * 1.5), 2)
-                tp2 = round(current_price - (risk * 2.5), 2)
-                
-                msg = f"""🛡️ **توصية هيرمز المؤسسية الاحترافية (SMC SELL)** 🛡️
-━━━━━━━━━━━━━━━━━━
-💱 **الأصل/الزوج:** {name} ({symbol})
-📈 **نوع الصفقة:** 🔴 بيع ذكي (Supply Block)
-⏱️ **الاتجاه العام (4H):** 📉 هابط كلي (Bearish Structure)
-━━━━━━━━━━━━━━━━━━
-🔍 **التأكيدات البرمجية المتقدمة:**
-- السعر يختبر قمة سحب سيولة (Buy-side Liquidity).
-- متوافق مع التدفق المالي الهابط للمؤسسات (Trend Match).
-- الوقف والاهداف ديناميكية ومحسوبة بدقة بناءً على التقلب الحالي (ATR).
-
-💵 **سعر الدخول الحالي:** {current_price}
-
-🛑 **وقف الخسارة (SL):** {sl}
-🎯 **الهدف الأول (TP1):** {tp1}
-🎯 **الهدف الثاني (TP2):** {tp2}
-━━━━━━━━━━━━━━━━━━
-⚠️ **إدارة المخاطر:** لا تخاطر بأكثر من 1% من محفظتك في الصفقة."""
-                send_telegram_message(msg)
-                time.sleep(3)
-                
-        except Exception as e:
-            print(f"خطأ أثناء تحليل {name}: {e}")
-
-def run_market_loop():
-    while True:
-        try:
-            analyze_smc_markets()
-        except Exception as e:
-            print(f"Loop error: {e}")
-        time.sleep(60) # فحص كل دقيقة لاقتناص السيولة الحية
-
-if __name__ == "__main__":
-    bot_thread = Thread(target=run_market_loop)
-    bot_thread.daemon = True
-    bot_thread.start()
-    
-    # حل مشكلة قراءة المنفذ في الاستضافات المجانية لتفادي خطأ الـ None
-    try:
-        port = int(os.environ.get("PORT", 5000))
-    except (TypeError, ValueError):
-        port = 5000
-        
-    app.run(host="0.0.0.0", port=port)
-    # رسالة اختبار للاتصال
-send_telegram_message("✅ تم تشغيل البوت بنجاح! السيرفر يعمل الآن ويراقب الأسواق..")
-
+                tp
