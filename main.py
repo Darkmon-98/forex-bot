@@ -105,4 +105,41 @@ def analyze_smc_markets():
             elif current_price >= max_high * 0.999 and trend == "BEARISH":
                 sl = round(current_price + (atr * 1.5), 2)
                 risk = sl - current_price
-                tp
+                tp1 = round(current_price - (risk * 1.5), 2)
+                tp2 = round(current_price - (risk * 2.5), 2)
+                
+                msg = f"""🛡️ **توصية هيرمز المؤسسية الاحترافية (SMC SELL)** 🛡️
+━━━━━━━━━━━━━━━━━━
+💱 **الأصل/الزوج:** {name} ({symbol})
+📈 **نوع الصفقة:** 🔴 بيع ذكي (Supply Block)
+⏱️ **الاتجاه العام (4H):** 📉 هابط كلي (Bearish Structure)
+━━━━━━━━━━━━━━━━━━
+🔍 **التأكيدات البرمجية المتقدمة:**
+- السعر يختبر قمة سحب سيولة (Buy-side Liquidity).
+- متوافق مع التدفق المالي الهابط للمؤسسات (Trend Match).
+- الوقف والاهداف ديناميكية ومحسوبة بدقة بناءً على التقلب الحالي (ATR).
+
+💵 **سعر الدخول الحالي:** {current_price}
+
+🛑 **وقف الخسارة (SL):** {sl}
+🎯 **الهدف الأول (TP1):** {tp1}
+🎯 **الهدف الثاني (TP2):** {tp2}
+━━━━━━━━━━━━━━━━━━
+⚠️ **إدارة المخاطر:** لا تخاطر بأكثر من 1% من محفظتك في الصفقة."""
+                send_telegram_message(msg)
+                time.sleep(3)
+                
+        except Exception as e:
+            print(f"خطأ أثناء تحليل {name}: {e}")
+
+if __name__ == "__main__":
+    # إرسال رسالة ترحيبية فورية للتأكد من نجاح الاتصال بالتليجرام عند الإقلاع
+    send_telegram_message("🤖 تم تشغيل بوت التداول المؤسسي (SMC) بنجاح على خادم الخلفية السحابي! جاري فحص الأسواق الآن...")
+    
+    # حلقة التشغيل اللانهائية للفحص كل دقيقة
+    while True:
+        try:
+            analyze_smc_markets()
+        except Exception as e:
+            print(f"Loop error: {e}")
+        time.sleep(60)
