@@ -10,8 +10,8 @@ import json
 # 🔑 إعدادات البوت — ضع التوكن في متغير بيئي لحماية أمانك
 # في الترمنل: export BOT_TOKEN="توكنك_هنا"
 # ═══════════════════════════════════════════════════════════════
-BOT_TOKEN = os.environ.get("BOT_TOKEN"8069323015:AAGy4haTvatdGF34R4ds0JZHHCsW0sqXkJw")
-CHAT_ID   = os.environ.get("CHAT_ID",   "@Forexsignals908765")
+BOT_TOKEN = "8069323015:AAGy4haTvatdGF34R4ds0JZHHCsW0sqXkJw"
+CHAT_ID   =   "@Forexsignals908765"
 
 # ═══════════════════════════════════════════════════════════════
 # 📊 الأصول المستهدفة
