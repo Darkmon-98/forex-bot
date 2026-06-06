@@ -11,7 +11,7 @@ import json
 # في الترمنل: export BOT_TOKEN="توكنك_هنا"
 # ═══════════════════════════════════════════════════════════════
 BOT_TOKEN = "8069323015:AAElFLIaHIj0bkz6XKWrRtB73y8hROFdzjA"
-CHAT_ID   =   "@Forexsignals908765"
+CHAT_ID   = "@Forexsignals908765"
 
 # ═══════════════════════════════════════════════════════════════
 # 📊 الأصول المستهدفة
