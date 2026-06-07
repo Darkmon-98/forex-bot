@@ -8,11 +8,11 @@ import json
 
 # ═══════════════════════════════════════════════════════════════
 # 🔑 إعدادات البوت
-# في الترمنل: export BOT_TOKEN="توكنك_هنا"
-#             export CHAT_ID="@اسم_قناتك"
+# في الترمنل: export BOT_TOKEN="8069323015:AAElFLIaHIj0bkz6XKWrRtB73y8hROFdzjA"
+#             export CHAT_ID="@Forexsignals908765"
 # ═══════════════════════════════════════════════════════════════
-BOT_TOKEN = "BOT_TOKEN", "8069323015:AAElFLIaHIj0bkz6XKWrRtB73y8hROFdzjA"
-CHAT_ID   = "CHAT_ID",   "@Forexsignals908765"
+BOT_TOKEN = "BOT_TOKEN",("8069323015:AAElFLIaHIj0bkz6XKWrRtB73y8hROFdzjA")
+CHAT_ID   = "CHAT_ID",("@Forexsignals908765")
 
 # ═══════════════════════════════════════════════════════════════
 # 📊 أسواق الفوركس والسلع
