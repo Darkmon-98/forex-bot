@@ -1,90 +1,41 @@
 import time
 import datetime
 import requests
-import yfinance as yf
 import pandas as pd
-import xml.etree.ElementTree as ET
 import os
 import json
+import threading
+from flask import Flask
 
 # ═══════════════════════════════════════════════════════════════
-# 🔑 إعدادات البوت والقناة
+# 🌐 إعداد خادم الويب (Web App Bypass) لمنع الـ Timeout
 # ═══════════════════════════════════════════════════════════════
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8069323015:AAElFLIaHIj0bkz6XKWrRtB73y8hROFdzjA")
-CHAT_ID   = os.environ.get("CHAT_ID",   "@Forexsignals908765")
-LOG_FILE  = "signals_log.json"
+app = Flask(__name__)
 
-# الأصول المالية المراقبة
-SYMBOLS = {"NQ=F": "الميني ناسداك (Nasdaq)", "GC=F": "الذهب اللحظي (Gold)"}
-CRYPTO_SYMBOLS = {"BTC-USD": "بيتكوين (Bitcoin)", "ETH-USD": "إيثيريوم (Ethereum)", "SOL-USD": "سولانا (Solana)"}
+@app.route('/')
+def home():
+    return "🦅 نظام صائد السيولة الثلاثي الاحترافي (1D + 1H + 15M) يعمل سحابياً بنجاح!"
 
-# ═══════════════════════════════════════════════════════════════
-# 📰 فلتر أخبار فوركس والسلع (Forex Factory)
-# ═══════════════════════════════════════════════════════════════
-def get_upcoming_high_impact_news():
-    """جلب الأخبار الاقتصادية الكلاسيكية عالية التأثير"""
-    try:
-        url = "https://nfs.forexfactory.com/ffcal_week_this.xml"
-        response = requests.get(url, timeout=10)
-        if response.status_code != 200: return []
-        
-        root = ET.fromstring(response.content)
-        today_str = datetime.datetime.now().strftime('%Y%m%d')
-        high_impact_events = []
-        
-        for event in root.findall('.//event'):
-            impact = event.find('impact').text if event.find('impact') is not None else ''
-            date = event.find('date').text if event.find('date') is not None else ''
-            
-            if impact == 'High' and date.replace('-', '') >= today_str:
-                high_impact_events.append({
-                    'currency': event.find('currency').text,
-                    'title': event.find('title').text,
-                    'time': event.find('time').text
-                })
-        return high_impact_events[:3]
-    except:
-        return []
+PA_PROXY = {"http": "http://proxy.server:3128", "https": "http://proxy.server:3128"}
 
 # ═══════════════════════════════════════════════════════════════
-# 🪙 فلتر وتحليل أخبار وأحداث الكريبتو الحية (Crypto Events API)
+# 🔑 الإعدادات الأساسية
 # ═══════════════════════════════════════════════════════════════
-def get_crypto_news_alerts(crypto_name):
-    """جلب عناوين الأحداث الحالية والمؤثرة لعملة معينة"""
-    try:
-        # استخدام مصدر مفتوح لجلب آخر الأخبار والأحداث للعملة المحددة عبر Coingecko أو خوادم التغذية المفتوحة
-        symbol_clean = crypto_name.split('-')[0].lower() # يحول BTC-USD إلى btc
-        url = f"https://api.coingecko.com/api/v3/news"
-        res = requests.get(url, timeout=5).json()
-        
-        relevant_news = []
-        if 'data' in res:
-            for item in res['data']:
-                # إذا كان الخبر يحتوي على اسم العملة، نعتبره مهماً لها
-                if symbol_clean in item['title'].lower() or symbol_clean in item['description'].lower():
-                    relevant_news.append(item['title'])
-                if len(relevant_news) >= 2: # نكتفي بآخر خبرين هامين
-                    break
-        return relevant_news
-    except:
-        return []
+BOT_TOKEN = "8069323015:AAElFLIaHIj0bkz6XKWrRtB73y8hROFdzjA"
+CHAT_ID   = "@Forexsignals908765"
+LOG_FILE  = "/home/Xcaliber/signals_log.json"
+
+# الأصول المالية الموحدة والسريعة (كريبتو + ذهب + فوركس موازي)
+SYMBOLS_POOL = {
+    "BTCUSDT": {"name": "بيتكوين (Bitcoin)", "type": "CRYPTO"}, 
+    "ETHUSDT": {"name": "إيثيريوم (Ethereum)", "type": "CRYPTO"}, 
+    "SOLUSDT": {"name": "سولانا (Solana)", "type": "CRYPTO"},
+    "PAXGUSDT": {"name": "الذهب الفوري (Gold)", "type": "COMMODITY"},
+    "EURUSDT": {"name": "اليورو دولار (EUR/USD)", "type": "FOREX"}
+}
 
 # ═══════════════════════════════════════════════════════════════
-# 📊 جلب مؤشر الخوف والطمع للكريبتو
-# ═══════════════════════════════════════════════════════════════
-def get_crypto_fear_and_greed():
-    try:
-        res = requests.get("https://api.alternative.me/fng/", timeout=5).json()
-        value = res['data'][0]['value']
-        classification = res['data'][0]['value_classification']
-        
-        dict_ar = {"Extreme Fear": "😱 خوف شديد", "Fear": "😨 خوف", "Neutral": "😐 محايد", "Greed": "🤑 طمع", "Extreme Greed": "🔥 طمع شديد"}
-        return f"{value} ({dict_ar.get(classification, classification)})"
-    except:
-        return "50 (😐 محايد)"
-
-# ═══════════════════════════════════════════════════════════════
-# 📂 إدارة السجلات والفلاتر الزمنية
+# 📂 إدارة السجلات والتحكم بالتكرار
 # ═══════════════════════════════════════════════════════════════
 def load_log():
     if os.path.exists(LOG_FILE):
@@ -96,198 +47,148 @@ def load_log():
 def save_log(log):
     with open(LOG_FILE, "w", encoding="utf-8") as f: json.dump(log, f, ensure_ascii=False, indent=2)
 
-def already_sent(log, symbol, signal_type, hours=4):
-    key = f"{symbol}_{signal_type}"
-    if key not in log: return False
+def already_sent(log, symbol, hours=8):
+    if symbol not in log: return False
     try:
-        last_time = datetime.datetime.fromisoformat(log[key])
+        last_time = datetime.datetime.fromisoformat(log[symbol])
         return (datetime.datetime.now() - last_time).total_seconds() < hours * 3600
     except: return False
 
-def is_market_open():
-    now_est = datetime.datetime.utcnow() - datetime.timedelta(hours=5)
-    return now_est.weekday() < 5
-
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    try: requests.post(url, json={"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}, timeout=10)
-    except Exception as e: print(f"❌ خطأ تلغرام: {e}")
+    try: requests.post(url, json={"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}, proxies=PA_PROXY, timeout=10)
+    except: pass
 
 # ═══════════════════════════════════════════════════════════════
-# 📐 العمليات الحسابية والمؤشرات الفنية
+# 📐 دالة الحسابات الفنية للأطر الزمنية
 # ═══════════════════════════════════════════════════════════════
-def calculate_indicators(df):
+def extract_indicators(res):
+    df = pd.DataFrame(res, columns=['Time', 'Open', 'High', 'Low', 'Close', 'Volume', 'CT', 'AV', 'T', 'TB', 'TQ', 'I']).astype(float)
+    
+    # حساب ATR للنطاق الحركي
     hl, hc, lc = df['High'] - df['Low'], (df['High'] - df['Close'].shift()).abs(), (df['Low'] - df['Close'].shift()).abs()
     df['ATR'] = pd.concat([hl, hc, lc], axis=1).max(axis=1).rolling(14).mean()
     
+    # حساب RSI
     delta = df['Close'].diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
+    gain = (delta.clip(lower=0)).rolling(14).mean()
     loss = (-delta.clip(upper=0)).rolling(14).mean()
-    df['RSI'] = 100 - (100 / (1 + (gain / loss)))
+    df['RSI'] = 100 - (100 / (1 + (gain / (loss + 1e-10))))
     
+    # حساب البولينجر باند
     df['MA20'] = df['Close'].rolling(20).mean()
     df['STD20'] = df['Close'].rolling(20).std()
-    df['Upper_BB'] = df['MA20'] + (df['STD20'] * 2)
     df['Lower_BB'] = df['MA20'] - (df['STD20'] * 2)
     
+    # حساب طفرة السيولة
     df['Avg_Vol'] = df['Volume'].rolling(20).mean()
-    df['Vol_Spike'] = df['Volume'] / df['Avg_Vol']
+    df['Vol_Spike'] = df['Volume'] / (df['Avg_Vol'] + 1e-10)
+    
     return df
 
 # ═══════════════════════════════════════════════════════════════
-# 💹 فحص صفقات الـ SMC (فوركس وسلع)
+# 🎯 محرك القنص والتحليل ثلاثي الأبعاد
 # ═══════════════════════════════════════════════════════════════
-def analyze_forex_smc(symbol, name, log, news_list):
+def sniper_analyze(symbol, info, log):
+    if already_sent(log, symbol): return
+    
     try:
-        df = yf.Ticker(symbol).history(period="7d", interval="1h")
-        if df.empty or len(df) < 30: return
-        df = calculate_indicators(df)
+        base_url = "https://api.binance.com/api/v3/klines?symbol="
         
-        current_price = round(df['Close'].iloc[-1], 2)
-        min_low = round(df['Low'].iloc[-15:-1].min(), 2)
-        max_high = round(df['High'].iloc[-15:-1].max(), 2)
-        rsi = df['RSI'].iloc[-1]
-        atr = df['ATR'].iloc[-1]
+        # 1️⃣ جلب بيانات الفريم اليومي (1D) - هيكل السوق العام
+        res_d = requests.get(f"{base_url}{symbol}&interval=1d&limit=30", proxies=PA_PROXY, timeout=5).json()
+        df_d = extract_indicators(res_d)
+        price_d = df_d['Close'].iloc[-1]
+        lower_bb_d = df_d['Lower_BB'].iloc[-1]
+        ma20_d = df_d['MA20'].iloc[-1]
         
-        news_alert = ""
-        if news_list:
-            news_alert = "⚠️ *تنبيه تقويم اقتصادي هام اليوم:*\n"
-            for n in news_list: news_alert += f"  • 🔴 {n['title']} ({n['currency']}) | ⏰ {n['time']}\n"
-            news_alert += "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        # شرط الفريم اليومي: السعر في النصف السفلي من البولينجر أو قريب من القاع اليومي لدعم الارتداد
+        if price_d > ma20_d: return 
 
-        if current_price <= min_low * 1.0015 and rsi < 45 and not already_sent(log, symbol, "BUY"):
-            sl = round(current_price - (atr * 1.5), 2)
-            risk = current_price - sl
-            tp1, tp2, tp3 = round(current_price + risk*1.2, 2), round(current_price + risk*2.2, 2), round(current_price + risk*3.5, 2)
-            
-            msg = (
-                f"🦅 *توصية قناص السيولة — SMC BUY* 🦅\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"📊 *الأصل المالي:* `{name}`\n"
-                f"🎯 *نوع الإشارة:* 🟢 شراء من منطقة طلب مؤسسية (Order Block)\n"
-                f"💵 *سعر الدخول المباشر:* `{current_price}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🛑 *إيقاف الخسارة (SL):* `{sl}`\n"
-                f"🎯 *الأهداف:*\n"
-                f"  • *🎯 الهدف الأول:* `{tp1}`\n"
-                f"  • *🎯 الهدف الثاني:* `{tp2}`\n"
-                f"  • *🎯 الهدف الثالث:* `{tp3}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{news_alert}"
-                f"📐 *مؤشر القوة النسبية (RSI):* {rsi:.1f}\n"
-                f"⏱️ فريم التحليل: 1 Hour"
-            )
-            send_telegram_message(msg)
-            log[f"{symbol}_BUY"] = datetime.datetime.now().isoformat()
-            save_log(log)
-
-        elif current_price >= max_high * 0.9985 and rsi > 55 and not already_sent(log, symbol, "SELL"):
-            sl = round(current_price + (atr * 1.5), 2)
-            risk = sl - current_price
-            tp1, tp2, tp3 = round(current_price - risk*1.2, 2), round(current_price - risk*2.2, 2), round(current_price - risk*3.5, 2)
-            
-            msg = (
-                f"🦅 *توصية قناص السيولة — SMC SELL* 🦅\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"📊 *الأصل المالي:* `{name}`\n"
-                f"🎯 *نوع الإشارة:* 🔴 بيع من منطقة عرض مؤسسية (Supply Block)\n"
-                f"💵 *سعر الدخول المباشر:* `{current_price}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🛑 *إيقاف الخسارة (SL):* `{sl}`\n"
-                f"🎯 *الأهداف:*\n"
-                f"  • *🎯 الهدف الأول:* `{tp1}`\n"
-                f"  • *🎯 الهدف الثاني:* `{tp2}`\n"
-                f"  • *🎯 الهدف الثالث:* `{tp3}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{news_alert}"
-                f"📐 *مؤشر القوة النسبية (RSI):* {rsi:.1f}\n"
-                f"⏱️ فريم التحليل: 1 Hour"
-            )
-            send_telegram_message(msg)
-            log[f"{symbol}_SELL"] = datetime.datetime.now().isoformat()
-            save_log(log)
-    except Exception as e:
-        print(f"❌ خطأ تحليل فوركس: {e}")
-
-# ═══════════════════════════════════════════════════════════════
-# 🪙 فحص صفقات العملات الرقمية (مع دمج تحليل الأخبار المخصصة)
-# ═══════════════════════════════════════════════════════════════
-def analyze_crypto_advanced(symbol, name, log):
-    try:
-        df = yf.Ticker(symbol).history(period="5d", interval="1h")
-        if df.empty or len(df) < 25: return
-        df = calculate_indicators(df)
+        # 2️⃣ جلب بيانات فريم الساعة (1H) - فلتر سيولة الحيتان والتأكيد
+        res_h = requests.get(f"{base_url}{symbol}&interval=1h&limit=30", proxies=PA_PROXY, timeout=5).json()
+        df_h = extract_indicators(res_h)
+        price_h = df_h['Close'].iloc[-1]
+        rsi_h = df_h['RSI'].iloc[-1]
+        vol_ratio_h = df_h['Vol_Spike'].iloc[-1]
+        lower_bb_h = df_h['Lower_BB'].iloc[-1]
+        atr_h = df_h['ATR'].iloc[-1]
         
-        current_price = round(df['Close'].iloc[-1], 4)
-        rsi = df['RSI'].iloc[-1]
-        atr = df['ATR'].iloc[-1]
-        vol_ratio = df['Vol_Spike'].iloc[-1]
-        lower_bb = df['Lower_BB'].iloc[-1]
-        upper_bb = df['Upper_BB'].iloc[-1]
-        
-        fng = get_crypto_fear_and_greed()
-        
-        # 🪙 سحب العناوين الإخبارية الحية للعملة الحالية لمنع المفاجآت
-        crypto_news = get_crypto_news_alerts(symbol)
-        crypto_news_alert = ""
-        if crypto_news:
-            crypto_news_alert = "📰 *أحدث المستجدات الإخبارية المرصودة للعملة:*\n"
-            for news in crypto_news:
-                crypto_news_alert += f"  • 💬 {news}\n"
-            crypto_news_alert += "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        # شرط الساعة: تشبع بيعي واضح مع بداية تدفق أحجام تداول عالية
+        if not (rsi_h < 40 and price_h <= lower_bb_h * 1.005 and vol_ratio_h >= 1.2): return
 
-        # إشارة شراء كريبتو متقدمة بفلتر الحجم والأخبار
-        if rsi < 35 and current_price <= lower_bb and vol_ratio >= 1.4 and not already_sent(log, symbol, "BUY"):
-            sl = round(current_price - (atr * 2), 4)
-            risk = current_price - sl
-            tp1, tp2, tp3 = round(current_price + risk*1.5, 4), round(current_price + risk*2.5, 4), round(current_price + risk*4, 4)
-            
-            msg = (
-                f"🪙 *توصية سيولة الحيتان — CRYPTO BUY* 🪙\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🔵 *العملة الرقمية:* {name}\n"
-                f"📈 *نوع الحركة:* 🟢 اقتناص قاع خارج حدود بولينجر وبداية ارتداد\n"
-                f"💵 *سعر الدخول الحالي:* `{current_price}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🛑 *إيقاف الخسارة (SL):* `{sl}`\n"
-                f"🎯 *الأهداف المستهدفة:*\n"
-                f"  • *🎯 هدف أول:* `{tp1}`\n"
-                f"  • *🎯 هدف ثاني:* `{tp2}`\n"
-                f"  • *🎯 هدف ثالث:* `{tp3}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{crypto_news_alert}" # طباعة الأخبار الحية هنا
-                f"🔥 *حجم التداول:* تدفق سيولة بمقدار `{vol_ratio:.1f}x` ضعف المعتاد\n"
-                f"😱 *مؤشر الخوف والطمع الحالي للكريبتو:* `{fng}`\n"
-                f"📐 *مؤشر القوة النسبية RSI:* `{rsi:.1f}`"
-            )
-            send_telegram_message(msg)
-            log[f"{symbol}_BUY"] = datetime.datetime.now().isoformat()
-            save_log(log)
-            
-    except Exception as e:
-        print(f"❌ خطأ تحليل كريبتو: {e}")
+        # 3️⃣ جلب بيانات فريم الربع ساعة (15M) - نقطة التنفيذ والدخول الدقيق
+        res_m = requests.get(f"{base_url}{symbol}&interval=15m&limit=30", proxies=PA_PROXY, timeout=5).json()
+        df_m = extract_indicators(res_m)
+        rsi_m = df_m['RSI'].iloc[-1]
+        rsi_m_prev = df_m['RSI'].iloc[-2]
+        
+        # شرط الربع ساعة: حدوث ارتداد إيجابي ميكروسكوبي مؤكد (الـ RSI بدأ يرتفع صعوداً)
+        if not (rsi_m > rsi_m_prev): return
+        
+        # ═══════════════════════════════════════════════════════════
+        # 💵 حساب النقاط الاحترافية وإرسال الصفقة القناصة
+        # ═══════════════════════════════════════════════════════════
+        current_price = round(price_h, 4)
+        sl = round(current_price - (atr_h * 1.5), 4) # وقف خسارة صغير جداً ومحمي بـ ATR
+        risk = current_price - sl
+        
+        tp1 = round(current_price + (risk * 1.5), 4)
+        tp2 = round(current_price + (risk * 3.0), 4)
+        tp3 = round(current_price + (risk * 5.0), 4) # أهداف واسعة لأن الاتجاه اليومي يدعمنا
+        
+        msg = (
+            f"🦅 *قناص السيولة المحترف — إشارة ثلاثية الأبعاد* 🦅\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔵 *الأصل المالي:* {info['name']} (`{symbol}`)\n"
+            f"🏷️ *تصنيف السوق:* {info['type']}\n"
+            f"📈 *نوع الصفقة:* 🟢 شراء ارتدادي من قاع يومي مؤكد\n"
+            f"💵 *سعر التنفيذ الحالي:* `{current_price}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛑 *إيقاف الخسارة الصارم (SL):* `{sl}`\n"
+            f"🎯 *الأهداف المستهدفة (معدل عائد عالي):*\n"
+            f"  • *🎯 هدف أول (T1):* `{tp1}`\n"
+            f"  • *🎯 هدف ثاني (T2):* `{tp2}`\n"
+            f"  • *🎯 هدف ثالث (T3):* `{tp3}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔍 *التأكيدات الهيكلية الفنية:*\n"
+            f"• 📅 *الفريم اليومي:* السعر مستقر في مناطق الخصم والشراء العميقة.\n"
+            f"• ⏱️ *فريم الساعة:* رصد طفرة سيولة صناع السوق بمقدار `{vol_ratio_h:.1f}x` مع تشبع بيعي.\n"
+            f"• ⚡ *فريم الربع ساعة:* تأكيد الدخول الفوري عبر انعكاس الزخم المصغر.\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💎 *إدارة المخاطر:* الصفقات مصفاة بالكامل ومحمية برمجياً."
+        )
+        
+        send_telegram_message(msg)
+        log[symbol] = datetime.datetime.now().isoformat()
+        save_log(log)
+        
+    except:
+        pass
 
 # ═══════════════════════════════════════════════════════════════
-# 🚀 المحرك الرئيسي
+# 🔄 الحلقة المستمرة للفحص المتقدم
 # ═══════════════════════════════════════════════════════════════
-if __name__ == "__main__":
-    print("🦅 تم دمج فلاتر الأخبار الكاملة للفوركس والعملات الرقمية بنجاح...")
+def bot_loop():
     log = load_log()
-    news_list = get_upcoming_high_impact_news()
+    
+    welcome_msg = (
+        "🦅 *تم تفعيل نظام قناص السيولة ثلاثي الأبعاد المطور بنجاح!* 🦅\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🤖 المحرك السحابي الجديد يدمج الآن 3 أطر زمنية موحدة:\n"
+        "1️⃣ تحليل هيكل السوق والخصم على *الفريم اليومي (1D)*\n"
+        "2️⃣ رصد طفرات سيولة الحيتان والـ RSI على *فريم الساعة (1H)*\n"
+        "3️⃣ اقتناص توقيت التنفيذ والدخول الدقيق على *فريم الربع ساعة (15M)*\n\n"
+        "الفحص جارٍ الآن تلقائياً وبأعلى استقرار لكل الأصول المحددة! 🔥"
+    )
+    send_telegram_message(welcome_msg)
     
     while True:
         try:
-            if datetime.datetime.now().minute == 0:
-                news_list = get_upcoming_high_impact_news()
-                
-            if is_market_open():
-                for sym, name in SYMBOLS.items():
-                    analyze_forex_smc(sym, name, log, news_list)
-                    
-            for sym, name in CRYPTO_SYMBOLS.items():
-                analyze_crypto_advanced(sym, name, log)
-                
-            time.sleep(300)
-        except Exception as e:
-            print(f"🚨 خطأ: {e}")
+            for sym, info in SYMBOLS_POOL.items():
+                sniper_analyze(sym, info, log)
+            time.sleep(300) # فحص متكامل ومستقر كل 5 دقائق
+        except:
             time.sleep(60)
+
+threading.Thread(target=bot_loop, daemon=True).start()
