@@ -29,7 +29,7 @@ def home():
 # ═══════════════════════════════════════════════════════════════
 # 🔑 الإعدادات الأساسية
 # ═══════════════════════════════════════════════════════════════
-BOT_TOKEN = "8069323015:AAElFLIaHIj0bkz6XKWrRtB73y8hROFdzjA"
+BOT_TOKEN = ""
 CHAT_ID   = "@Forexsignals908765"
 LOG_FILE  = "/home/Xcaliber/signals_log.json"
 
