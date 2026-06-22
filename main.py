@@ -23,7 +23,7 @@ from telegram.ext import (
 from datetime import datetime
 
 # ─── الإعدادات ──────────────────────────────────────────────────
-BOT_TOKEN = "ضع_توكن_البوت_هنا"   # احصل عليه من @BotFather
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 # ملف حفظ إعدادات التنبيهات
 ALERTS_FILE = "alerts.json"
